@@ -15,10 +15,10 @@ TOURNAMENT_SIZE = 3
 
 # Directions: 0=Up, 1=Down, 2=Left, 3=Right
 DIRECTIONS = {
-    0: (-1, 0),  # Up (decrease row)
-    1: (1, 0),   # Down (increase row)
-    2: (0, -1),  # Left (decrease column)
-    3: (0, 1)    # Right (increase column)
+    0: (-1, 0),
+    1: (1, 0),
+    2: (0, -1),
+    3: (0, 1) 
 }
 
 def setup_maze():
@@ -26,8 +26,8 @@ def setup_maze():
     maze = Maze()
     maze.generator = Prims(16, 16)
     maze.generate()
-    maze.start = (1, 1)  # Start at top-left corner
-    maze.end = (maze.grid.shape[0]-2, maze.grid.shape[1]-2)  # End at bottom-right corner
+    maze.start = (1, 1)
+    maze.end = (maze.grid.shape[0]-2, maze.grid.shape[1]-2)
     return maze
 
 def execute_gene(maze, gene_vector):
@@ -49,7 +49,6 @@ def execute_gene(maze, gene_vector):
             x, y = new_x, new_y
             path.append((x, y))
             
-            # Early exit if goal reached
             if (x, y) == maze.end:
                 break
                 
@@ -57,16 +56,9 @@ def execute_gene(maze, gene_vector):
 
 def evaluate_fitness(path, final_position, end_position, gene_length):
     """Calculate fitness score (lower is better)."""
-    # Manhattan distance to goal
     distance = abs(final_position[0] - end_position[0]) + abs(final_position[1] - end_position[1])
-    
-    # Reward reaching the goal
     goal_reward = 0 if distance == 0 else 1000
-    
-    # Number of unique positions visited (encourage exploration)
     unique_positions = len(set(path))
-    
-    # Fitness combines distance, gene length (shorter is better), and unique positions
     return distance + goal_reward + (gene_length / 10) - (unique_positions / 2)
 
 def initialize_population(pop_size, gene_length):
@@ -111,26 +103,21 @@ def genetic_algorithm(maze):
         fitness_scores = []
         paths = []
         
-        # Evaluate each individual
         for individual in population:
             path, final_pos = execute_gene(maze, individual)
             score = evaluate_fitness(path, final_pos, maze.end, len(individual))
             fitness_scores.append(score)
             
-            # Track best solution
             if score < best_fitness:
                 best_fitness = score
                 best_individual = deepcopy(individual)
                 best_path = path
         
-        # Generate next population
         new_population = []
         
-        # Elitism: keep best individual
         if best_individual:
             new_population.append(best_individual)
         
-        # Create offspring
         while len(new_population) < POPULATION_SIZE:
             parent1, parent2 = select_parents(population, fitness_scores)
             child1, child2 = crossover(parent1, parent2)
@@ -138,10 +125,8 @@ def genetic_algorithm(maze):
             child2 = mutation(child2)
             new_population.extend([child1, child2])
         
-        # Update population
         population = new_population[:POPULATION_SIZE]
         
-        # Print progress
         if generation % 10 == 0:
             print(f"Generation {generation}: Best fitness={best_fitness:.1f}, "
                   f"Final position={best_path[-1] if best_path else None}")
@@ -152,20 +137,17 @@ def visualize_maze(maze, path=None):
     """Proper visualization accounting for matrix coordinates."""
     plt.figure(figsize=(10, 10))
     
-    # Display maze (0=wall=black, 1=path=white)
     plt.imshow(maze.grid, cmap='binary')
     
     if path:
-        # Extract coordinates accounting for matplotlib's display orientation
         y_coords = [p[1] for p in path]
         x_coords = [p[0] for p in path]
         plt.plot(y_coords, x_coords, 'r-', linewidth=2)
     
-    # Mark start (green) and end (blue)
     plt.plot(maze.start[1], maze.start[0], 'go', markersize=10)
     plt.plot(maze.end[1], maze.end[0], 'bs', markersize=10)
     
-    plt.gca().invert_yaxis()  # Correct y-axis orientation
+    plt.gca().invert_yaxis()
     plt.show()
 
 # Main execution

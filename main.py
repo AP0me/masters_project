@@ -1,64 +1,187 @@
+import random
+from copy import deepcopy
 from mazelib import Maze
 from mazelib.generate.Prims import Prims
 import matplotlib.pyplot as plt
 import numpy as np
-from numpy import random
 
-def show_png(grid):
-    """Generate a simple image of the maze."""
-    numerical_grid = np.array(grid, dtype=np.uint8)
-    plt.figure(figsize=(10, 5))
-    plt.imshow(numerical_grid, interpolation='nearest')
-    plt.show()
+# Constants
+POPULATION_SIZE = 100
+GENE_LENGTH = 500
+GENERATIONS = 1000
+MUTATION_RATE = 0.1
+CROSSOVER_RATE = 0.7
+TOURNAMENT_SIZE = 3
 
+# Directions: 0=Up, 1=Down, 2=Left, 3=Right
+DIRECTIONS = {
+    0: (-1, 0),  # Up (decrease row)
+    1: (1, 0),   # Down (increase row)
+    2: (0, -1),  # Left (decrease column)
+    3: (0, 1)    # Right (increase column)
+}
 
-maze = Maze(1122)
-maze.generator = Prims(16, 16)
-maze.generate()
-maze.end = (1, 1)
-maze.start = (31, 31)
-
-gene_vector = random.randint(4, size=1000)
-
+def setup_maze():
+    """Initialize maze with proper dimensions."""
+    maze = Maze()
+    maze.generator = Prims(16, 16)
+    maze.generate()
+    maze.start = (1, 1)  # Start at top-left corner
+    maze.end = (maze.grid.shape[0]-2, maze.grid.shape[1]-2)  # End at bottom-right corner
+    return maze
 
 def execute_gene(maze, gene_vector):
-    """Simulate agent movement through a maze based on a gene vector.
+    """Simulate agent movement with accurate wall collision."""
+    x, y = maze.start
+    path = [(x, y)]
     
-    Args:
-        maze: Maze object containing start position and grid
-        gene_vector: List of movement commands (0: up, 1: down, 2: left, 3: right)
-    
-    Returns:
-        List of visited positions
-    """
-    # Constants for movement directions
-    UP, DOWN, LEFT, RIGHT = 0, 1, 2, 3
-    MOVEMENTS = {
-        UP: (0, -1),
-        DOWN: (0, 1),
-        LEFT: (-1, 0),
-        RIGHT: (1, 0)
-    }
-    GRID_SIZE = 32  # Assuming 32x32 grid from your original code
-    
-    agent_position = list(maze.start)
-    position_history = []
-
     for gene in gene_vector:
-        if gene not in MOVEMENTS:
+        if gene not in DIRECTIONS:
             continue
             
-        dx, dy = MOVEMENTS[gene]
-        new_x, new_y = agent_position[0] + dx, agent_position[1] + dy
+        dx, dy = DIRECTIONS[gene]
+        new_x, new_y = x + dx, y + dy
         
-        if not (0 <= new_x < GRID_SIZE and 0 <= new_y < GRID_SIZE):
-            continue
-        
-        if maze.grid[new_x][new_y] != "#":
-            agent_position = [new_x, new_y]
-            position_history.append(list(agent_position))  # Append a copy to avoid mutation
+        # Check boundaries and walls (0=wall, 1=path)
+        if (0 <= new_x < maze.grid.shape[0] and 
+            0 <= new_y < maze.grid.shape[1] and 
+            maze.grid[new_x][new_y] == 0):
+            x, y = new_x, new_y
+            path.append((x, y))
+            
+            # Early exit if goal reached
+            if (x, y) == maze.end:
+                break
+                
+    return path, (x, y)
 
-    return position_history
-agent_position_history = execute_gene(maze, gene_vector)
-print(agent_position_history)
-show_png(maze.grid)
+def evaluate_fitness(path, final_position, end_position, gene_length):
+    """Calculate fitness score (lower is better)."""
+    # Manhattan distance to goal
+    distance = abs(final_position[0] - end_position[0]) + abs(final_position[1] - end_position[1])
+    
+    # Reward reaching the goal
+    goal_reward = 0 if distance == 0 else 1000
+    
+    # Number of unique positions visited (encourage exploration)
+    unique_positions = len(set(path))
+    
+    # Fitness combines distance, gene length (shorter is better), and unique positions
+    return distance + goal_reward + (gene_length / 10) - (unique_positions / 2)
+
+def initialize_population(pop_size, gene_length):
+    """Create initial random population."""
+    return [[random.randint(0, 3) for _ in range(gene_length)] for _ in range(pop_size)]
+
+def select_parents(population, fitness_scores):
+    """Select two parents using tournament selection."""
+    parents = []
+    for _ in range(2):
+        candidates = random.sample(list(zip(population, fitness_scores)), TOURNAMENT_SIZE)
+        winner = min(candidates, key=lambda x: x[1])[0]
+        parents.append(winner)
+    return parents[0], parents[1]
+
+def crossover(parent1, parent2):
+    """Perform one-point crossover."""
+    if random.random() > CROSSOVER_RATE or len(parent1) < 2 or len(parent2) < 2:
+        return deepcopy(parent1), deepcopy(parent2)
+    
+    point = random.randint(1, min(len(parent1), len(parent2)) - 1)
+    child1 = parent1[:point] + parent2[point:]
+    child2 = parent2[:point] + parent1[point:]
+    return child1, child2
+
+def mutation(individual):
+    """Mutate genes with given probability."""
+    mutated = deepcopy(individual)
+    for i in range(len(mutated)):
+        if random.random() < MUTATION_RATE:
+            mutated[i] = random.randint(0, 3)
+    return mutated
+
+def genetic_algorithm(maze):
+    """Run genetic algorithm to solve maze."""
+    population = initialize_population(POPULATION_SIZE, GENE_LENGTH)
+    best_fitness = float('inf')
+    best_individual = None
+    best_path = None
+    
+    for generation in range(GENERATIONS):
+        fitness_scores = []
+        paths = []
+        
+        # Evaluate each individual
+        for individual in population:
+            path, final_pos = execute_gene(maze, individual)
+            score = evaluate_fitness(path, final_pos, maze.end, len(individual))
+            fitness_scores.append(score)
+            
+            # Track best solution
+            if score < best_fitness:
+                best_fitness = score
+                best_individual = deepcopy(individual)
+                best_path = path
+        
+        # Generate next population
+        new_population = []
+        
+        # Elitism: keep best individual
+        if best_individual:
+            new_population.append(best_individual)
+        
+        # Create offspring
+        while len(new_population) < POPULATION_SIZE:
+            parent1, parent2 = select_parents(population, fitness_scores)
+            child1, child2 = crossover(parent1, parent2)
+            child1 = mutation(child1)
+            child2 = mutation(child2)
+            new_population.extend([child1, child2])
+        
+        # Update population
+        population = new_population[:POPULATION_SIZE]
+        
+        # Print progress
+        if generation % 10 == 0:
+            print(f"Generation {generation}: Best fitness={best_fitness:.1f}, "
+                  f"Final position={best_path[-1] if best_path else None}")
+    
+    return best_individual, best_path
+
+def visualize_maze(maze, path=None):
+    """Proper visualization accounting for matrix coordinates."""
+    plt.figure(figsize=(10, 10))
+    
+    # Display maze (0=wall=black, 1=path=white)
+    plt.imshow(maze.grid, cmap='binary')
+    
+    if path:
+        # Extract coordinates accounting for matplotlib's display orientation
+        y_coords = [p[1] for p in path]
+        x_coords = [p[0] for p in path]
+        plt.plot(y_coords, x_coords, 'r-', linewidth=2)
+    
+    # Mark start (green) and end (blue)
+    plt.plot(maze.start[1], maze.start[0], 'go', markersize=10)
+    plt.plot(maze.end[1], maze.end[0], 'bs', markersize=10)
+    
+    plt.gca().invert_yaxis()  # Correct y-axis orientation
+    plt.show()
+
+# Main execution
+if __name__ == "__main__":
+    maze = setup_maze()
+    
+    print(f"Maze size: {maze.grid.shape}")
+    print(f"Start: {maze.start}, End: {maze.end}")
+    
+    # Run the genetic algorithm
+    best_solution, best_path = genetic_algorithm(maze)
+    
+    # Visualize the best solution
+    print("\nBest solution:")
+    print(f"Path length: {len(best_path)}")
+    print(f"Final position: {best_path[-1]}")
+    print(f"Reached goal: {best_path[-1] == maze.end}")
+    
+    visualize_maze(maze, best_path)

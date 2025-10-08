@@ -22,36 +22,43 @@ gene_vector = random.randint(4, size=1000)
 
 
 def execute_gene(maze, gene_vector):
-    """Generate a simple image of the maze."""
+    """Simulate agent movement through a maze based on a gene vector.
+    
+    Args:
+        maze: Maze object containing start position and grid
+        gene_vector: List of movement commands (0: up, 1: down, 2: left, 3: right)
+    
+    Returns:
+        List of visited positions
+    """
+    # Constants for movement directions
+    UP, DOWN, LEFT, RIGHT = 0, 1, 2, 3
+    MOVEMENTS = {
+        UP: (0, -1),
+        DOWN: (0, 1),
+        LEFT: (-1, 0),
+        RIGHT: (1, 0)
+    }
+    GRID_SIZE = 32  # Assuming 32x32 grid from your original code
+    
     agent_position = list(maze.start)
     position_history = []
 
     for gene in gene_vector:
-        tries_to_go_to = []
-        if gene == 0:
-            tries_to_go_to = [agent_position[0], agent_position[1] - 1]
-        if gene == 1:
-            tries_to_go_to = [agent_position[0], agent_position[1] + 1]
-        if gene == 2:
-            tries_to_go_to = [agent_position[0] - 1, agent_position[1]]
-        if gene == 3:
-            tries_to_go_to = [agent_position[0] + 1, agent_position[1]]
-
-        maze_cell = maze.grid[tries_to_go_to[0]][tries_to_go_to[1]]
-        if maze_cell == "#":
+        if gene not in MOVEMENTS:
             continue
-        else:
-            if tries_to_go_to[0] > 0 \
-            and tries_to_go_to[1] > 0 \
-            and tries_to_go_to[0] < 32 \
-            and tries_to_go_to[1] < 32:
-                agent_position = tries_to_go_to
-                position_history.append(agent_position)
-            else:
-                continue
+            
+        dx, dy = MOVEMENTS[gene]
+        new_x, new_y = agent_position[0] + dx, agent_position[1] + dy
+        
+        if not (0 <= new_x < GRID_SIZE and 0 <= new_y < GRID_SIZE):
+            continue
+        
+        if maze.grid[new_x][new_y] != "#":
+            agent_position = [new_x, new_y]
+            position_history.append(list(agent_position))  # Append a copy to avoid mutation
 
     return position_history
-
 agent_position_history = execute_gene(maze, gene_vector)
 print(agent_position_history)
 show_png(maze.grid)

@@ -11,7 +11,7 @@ POPULATION_SIZE = 200
 MIN_GENE_LENGTH = 50
 MAX_GENE_LENGTH = 1000
 GENERATIONS = 200
-MUTATION_RATE = 0.01
+MUTATION_RATE = 0.1
 CROSSOVER_RATE = 0.7
 TOURNAMENT_SIZE = POPULATION_SIZE * 50//100
 MAZE_SIZE = 63  # Change this value to adjust maze size
@@ -126,11 +126,14 @@ def select_parents(population, fitness_scores):
     return parents[0], parents[1]
 
 def mutation(individual):
-    """Mutate genes with given probability."""
+    """Mutate the last 30 genes by replacing them with new random values."""
     mutated = deepcopy(individual)
-    for i in range(len(mutated)):
-        if random.random() < MUTATION_RATE:
-            mutated[i] = random.randint(0, 3)
+    # Only perform mutation if individual has at least 30 elements
+    if len(mutated) >= 30:
+        # Create new random array of size 30
+        new_segment = np.random.randint(0, 4, size=30)  # 0 to 3 inclusive
+        # Replace the last 30 elements
+        mutated[-30:] = new_segment
     return mutated
 
 def crossover(parent1, parent2):

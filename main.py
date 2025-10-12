@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 # Constants
-GENERATIONS = 2000
+GENERATIONS = 1000
 CROSSOVER_RATE = 0.7
 NUM_SHADOWS = 5
 MAZE_SIZE = 65  # Change this value to adjust maze size
@@ -261,6 +261,10 @@ def genetic_algorithm(maze):
     best_individual = None
     best_path = None
     
+    # Track fitness statistics across generations
+    best_fitness_history = []
+    avg_fitness_history = []
+    
     # Set up plot
     plt.figure(figsize=(max(MAZE_SIZE/2, 8), max(MAZE_SIZE/2, 8)))
     
@@ -281,6 +285,12 @@ def genetic_algorithm(maze):
                 best_fitness = score
                 best_individual = deepcopy(individual)
                 best_path = path
+        
+        # Track statistics for this generation
+        current_best_fitness = max(fitness_scores)
+        current_avg_fitness = sum(fitness_scores) / len(fitness_scores)
+        best_fitness_history.append(current_best_fitness)
+        avg_fitness_history.append(current_avg_fitness)
         
         new_population = []
         
@@ -305,8 +315,8 @@ def genetic_algorithm(maze):
             unique_positions = len(set(best_path))
             backtrack_count = len(best_path) - unique_positions
             
-            print(f"Gen {generation}: Fit={best_fitness:.1f}, Len={len(best_individual)}, "
-                  f"Steps left={steps}, Backtrack={backtrack_count}")
+            print(f"Gen {generation}: BestFit={current_best_fitness:.1f}, AvgFit={current_avg_fitness:.1f}, "
+                  f"Len={len(best_individual)}, Steps left={steps}, Backtrack={backtrack_count}")
 
             # Visualize current state
             plt.clf()  # Clear the current figure
@@ -319,8 +329,7 @@ def genetic_algorithm(maze):
                 if paths[i] and len(paths[i]) > 1:  # Ensure valid path
                     y_coords_shadow = [p[1] for p in paths[i]]
                     x_coords_shadow = [p[0] for p in paths[i]]
-                    plt.plot(y_coords_shadow, x_coords_shadow, 'gray', 
-                             alpha=0.5, linewidth=1, linestyle='-')
+                    plt.plot(y_coords_shadow, x_coords_shadow, 'green', alpha=1, linewidth=3, linestyle='-')
             
             # Plot genetic algorithm's best path (red)
             if best_path:
@@ -349,7 +358,19 @@ def genetic_algorithm(maze):
             plt.draw()
             plt.pause(0.1)  # Small pause to update the plot
     
-    return best_individual, best_path
+    # Create fitness progression plot at the end
+    plt.figure(figsize=(10, 6))
+    plt.plot(range(GENERATIONS), best_fitness_history, 'r-', label='Best Fitness', linewidth=2)
+    plt.plot(range(GENERATIONS), avg_fitness_history, 'b-', label='Average Fitness', linewidth=2)
+    plt.xlabel('Generation')
+    plt.ylabel('Fitness')
+    plt.title('Fitness Progression Over Generations')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.show()
+    
+    return best_individual, best_path, best_fitness_history, avg_fitness_history
 
 def visualize_maze(maze, path=None):
     """Visualization with genetic solution (red) and actual optimal path from final position (blue)."""
@@ -426,12 +447,14 @@ if __name__ == "__main__":
     # Precompute distance map once
     distance_map = create_optimal_distance_map(maze)
     
-    best_solution, best_path = genetic_algorithm(maze)  # You'll need to update 
+    best_solution, best_path, best_history, avg_history = genetic_algorithm(maze)
     
     print("\nBest solution:")
     print(f"Path length: {len(best_path)}")
     print(f"Gene length: {len(best_solution)}")
     print(f"Final position: {best_path[-1]}")
     print(f"Reached goal: {best_path[-1] == maze.end}")
+    print(f"Final best fitness: {best_history[-1]:.2f}")
+    print(f"Final average fitness: {avg_history[-1]:.2f}")
     
     visualize_maze(maze, best_path)

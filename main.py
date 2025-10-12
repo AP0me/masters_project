@@ -7,13 +7,15 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 # Constants
-POPULATION_SIZE = 100
+POPULATION_SIZE = 200
 MIN_GENE_LENGTH = 50
 MAX_GENE_LENGTH = 1000
-GENERATIONS = 20
+GENERATIONS = 200
+MUTATION_RATE = 0.01
 CROSSOVER_RATE = 0.7
-TOURNAMENT_SIZE = 10
-MAZE_SIZE = 65  # Change this value to adjust maze size
+TOURNAMENT_SIZE = POPULATION_SIZE * 50//100
+MAZE_SIZE = 63  # Change this value to adjust maze size
+NUM_SHADOWS = 5
 
 # Directions: 0=Up, 1=Down, 2=Left, 3=Right
 DIRECTIONS = {
@@ -85,24 +87,27 @@ def steps_to_exit(maze, position):
     
     return -1
 
-def evaluate_fitness(maze, final_position, gene_length):
-    """Calculate fitness based on exact steps remaining to exit."""
+def evaluate_fitness(maze, final_position, gene_length, path):
+    """Calculate fitness based on exact steps remaining to exit, with backtracking penalty."""
     x, y = final_position
+    
+    # Calculate backtracking penalty
+    unique_positions = len(set(path))
+    backtrack_penalty = (len(path) - unique_positions) / len(path)
     
     # Full path completion gives maximum score
     if (x, y) == maze.end:
-        return 1000 - (gene_length * 0.1)  # Reward reaching exit, penalize long genes
+        return 1000 - (gene_length * 0.1) - backtrack_penalty
     
     steps = steps_to_exit(maze, (x, y))
     
     if steps == -1:
-        return -1000
+        return -1000 - backtrack_penalty
     
     max_possible_steps = 3 * MAZE_SIZE  # Approximate worst-case scenario
     scaled_fitness = max_possible_steps - steps
     
-    return scaled_fitness - (gene_length * 0.1)
-
+    return scaled_fitness - (gene_length * 0.1) - backtrack_penalty
 
 def initialize_population(pop_size):
     """Create initial random population with variable gene lengths."""
@@ -120,13 +125,22 @@ def select_parents(population, fitness_scores):
         parents.append(winner)
     return parents[0], parents[1]
 
+def mutation(individual):
+    """Mutate genes with given probability."""
+    mutated = deepcopy(individual)
+    for i in range(len(mutated)):
+        if random.random() < MUTATION_RATE:
+            mutated[i] = random.randint(0, 3)
+    return mutated
+
 def crossover(parent1, parent2):
     """Perform one-point crossover with variable-length genes."""
     if random.random() > CROSSOVER_RATE or len(parent1) < 2 or len(parent2) < 2:
         return deepcopy(parent1), deepcopy(parent2)
     
-    point1 = random.randint(1, len(parent1) - 1)
-    point2 = random.randint(1, len(parent2) - 1)
+    # Ensure at least one element remains from each parent
+    point1 = random.randint(len(parent1)//2, len(parent1) - 1)
+    point2 = random.randint(len(parent2)//2, len(parent2) - 1)
     
     child1 = parent1[:point1] + parent2[point2:]
     child2 = parent2[:point2] + parent1[point1:]
@@ -144,20 +158,26 @@ def crossover(parent1, parent2):
     return child1, child2
 
 def genetic_algorithm(maze):
-    """Run genetic algorithm to solve maze."""
+    """Run genetic algorithm to solve maze with visualization of other candidates."""
     population = initialize_population(POPULATION_SIZE)
     best_fitness = -float('inf')
     best_individual = None
     best_path = None
     
+    # Set up plot
+    plt.figure(figsize=(max(MAZE_SIZE/2, 8), max(MAZE_SIZE/2, 8)))
+    
     for generation in range(GENERATIONS):
         fitness_scores = []
         paths = []
+        all_individuals = []  # Store all individuals for visualization
         
         for individual in population:
             path, final_pos = execute_gene(maze, individual)
-            score = evaluate_fitness(maze, final_pos, len(individual))
+            score = evaluate_fitness(maze, final_pos, len(individual), path)
             fitness_scores.append(score)
+            paths.append(path)
+            all_individuals.append(individual)
             
             if score > best_fitness:
                 best_fitness = score
@@ -173,6 +193,8 @@ def genetic_algorithm(maze):
         while len(new_population) < POPULATION_SIZE:
             parent1, parent2 = select_parents(population, fitness_scores)
             child1, child2 = crossover(parent1, parent2)
+            child1 = mutation(child1)
+            child2 = mutation(child2)
             new_population.extend([child1, child2])
         
         population = new_population[:POPULATION_SIZE]
@@ -180,8 +202,54 @@ def genetic_algorithm(maze):
         if generation % 10 == 0:
             final_pos = best_path[-1] if best_path else (0, 0)
             steps = steps_to_exit(maze, final_pos) if final_pos != maze.end else 0
+            
+            # Calculate backtracking for best solution
+            unique_positions = len(set(best_path))
+            backtrack_count = len(best_path) - unique_positions
+            
             print(f"Gen {generation}: Fit={best_fitness:.1f}, Len={len(best_individual)}, "
-                  f"Steps left={steps}")
+                  f"Steps left={steps}, Backtrack={backtrack_count}")
+
+            # Visualize current state
+            plt.clf()  # Clear the current figure
+            plt.imshow(maze.grid, cmap='binary')
+            
+            # Plot shadows of other candidates (random sample)
+            shadow_indices = random.sample(range(len(paths)), NUM_SHADOWS)
+            
+            for i in shadow_indices:
+                if paths[i] and len(paths[i]) > 1:  # Ensure valid path
+                    y_coords_shadow = [p[1] for p in paths[i]]
+                    x_coords_shadow = [p[0] for p in paths[i]]
+                    plt.plot(y_coords_shadow, x_coords_shadow, 'gray', 
+                             alpha=0.5, linewidth=1, linestyle='-')
+            
+            # Plot genetic algorithm's best path (red)
+            if best_path:
+                y_coords = [p[1] for p in best_path]
+                x_coords = [p[0] for p in best_path]
+                plt.plot(y_coords, x_coords, 'r-', linewidth=3, alpha=0.8, label='GA Best Solution')
+            
+            # Plot actual shortest path from final position to exit (blue)
+            if best_path and best_path[-1] != maze.end:
+                final_pos = best_path[-1]
+                optimal_path = find_optimal_path(maze, final_pos)
+                if optimal_path:
+                    y_coords_opt = [p[1] for p in optimal_path]
+                    x_coords_opt = [p[0] for p in optimal_path]
+                    plt.plot(y_coords_opt, x_coords_opt, 'b-', linewidth=2, alpha=0.7,
+                             label='Optimal Path Remaining')
+            
+            # Start and end markers
+            plt.plot(maze.start[1], maze.start[0], 'go', markersize=10, label='Start')
+            plt.plot(maze.end[1], maze.end[0], 'bs', markersize=10, label='End')
+            
+            plt.gca().invert_yaxis()
+            plt.title(f"Gen {generation}: Maze Size {maze.grid.shape[0]}x{maze.grid.shape[1]}\n"
+                     f"Showing {NUM_SHADOWS} candidate shadows")
+            plt.legend()
+            plt.draw()
+            plt.pause(0.1)  # Small pause to update the plot
     
     return best_individual, best_path
 

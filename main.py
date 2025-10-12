@@ -7,14 +7,14 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 # Constants
-POPULATION_SIZE = 200
 MIN_GENE_LENGTH = 50
 MAX_GENE_LENGTH = 1000
 GENERATIONS = 200
-MUTATION_RATE = 0.1
 CROSSOVER_RATE = 0.7
+MAZE_SIZE = 129  # Change this value to adjust maze size
+POPULATION_SIZE = (MAZE_SIZE * MAZE_SIZE) / 16
 TOURNAMENT_SIZE = POPULATION_SIZE * 50//100
-MAZE_SIZE = 63  # Change this value to adjust maze size
+MUTATION_TIP_LENGTH = 30
 NUM_SHADOWS = 5
 
 # Directions: 0=Up, 1=Down, 2=Left, 3=Right

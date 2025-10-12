@@ -7,15 +7,15 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 # Constants
-GENERATIONS = 200
+GENERATIONS = 2000
 CROSSOVER_RATE = 0.7
 NUM_SHADOWS = 5
-MAZE_SIZE = 129  # Change this value to adjust maze size
+MAZE_SIZE = 65  # Change this value to adjust maze size
 POPULATION_SIZE = (MAZE_SIZE * MAZE_SIZE) // 16
 TOURNAMENT_SIZE = POPULATION_SIZE * 50//100
 MIN_GENE_LENGTH = MAZE_SIZE
 MAX_GENE_LENGTH = 3 * MAZE_SIZE
-MUTATION_TIP_LENGTH = MIN_GENE_LENGTH
+MUTATION_TIP_LENGTH = 10
 
 # Directions: 0=Up, 1=Down, 2=Left, 3=Right
 DIRECTIONS = {
@@ -33,6 +33,57 @@ def setup_maze(grid_size=MAZE_SIZE):
     maze.start = (1, 1)
     maze.end = (maze.grid.shape[0]-2, maze.grid.shape[1]-2)
     return maze
+
+def find_optimal_path(maze, start_pos=None):
+    """Find the actual shortest path from a start position to the maze exit using BFS.
+    If no start_pos is provided, use maze.start."""
+    if start_pos is None:
+        start_pos = maze.start
+    
+    if start_pos == maze.end:
+        return [start_pos]
+    
+    visited = {start_pos: None}  # Store parent information for path reconstruction
+    queue = deque([start_pos])
+    
+    while queue:
+        current = queue.popleft()
+        
+        if current == maze.end:
+            # Reconstruct path from end to start
+            path = []
+            while current is not None:
+                path.append(current)
+                current = visited[current]
+            return path[::-1]  # Reverse to get start to end
+        
+        x, y = current
+        for dx, dy in DIRECTIONS.values():
+            nx, ny = x + dx, y + dy
+            
+            # Check boundaries and valid path
+            if (0 <= nx < maze.grid.shape[0] and 
+                0 <= ny < maze.grid.shape[1] and 
+                maze.grid[nx][ny] == 0 and 
+                (nx, ny) not in visited):
+                
+                visited[(nx, ny)] = current
+                queue.append((nx, ny))
+    
+    return None  # No path found
+
+def create_optimal_distance_map(maze):
+    """Create a dictionary mapping each cell in the optimal path to steps remaining to exit."""
+    optimal_path = find_optimal_path(maze, maze.start)
+    if optimal_path is None:
+        return {}
+    
+    distance_map = {}
+    total_length = len(optimal_path)
+    for i, cell in enumerate(optimal_path):
+        distance_map[cell] = total_length - i - 1
+    
+    return distance_map
 
 def execute_gene(maze, gene_vector):
     """Simulate agent movement with accurate wall collision."""
@@ -58,10 +109,15 @@ def execute_gene(maze, gene_vector):
                 
     return path, (x, y)
 
-def steps_to_exit(maze, position):
-    """Calculate the minimum number of steps from position to maze exit using BFS."""
+def steps_to_exit(maze, position, distance_map):
+    """Calculate the minimum number of steps from position to maze exit using BFS.
+    Uses precomputed distance map to speed up computation when on optimal path."""
     if position == maze.end:
         return 0
+    
+    # Check if position is in the precomputed optimal path
+    if position in distance_map:
+        return distance_map[position]
     
     visited = set([position])  # Start with initial position visited
     queue = deque([(position[0], position[1], 0)])
@@ -80,34 +136,16 @@ def steps_to_exit(maze, position):
             if (nx, ny) == maze.end:
                 return steps + 1
             
+            # Check if cell is on optimal path (use precomputed map)
+            if (nx, ny) in distance_map:
+                return steps + 1 + distance_map[(nx, ny)]
+            
             # Check if valid path and not visited
             if maze.grid[nx][ny] == 0 and (nx, ny) not in visited:
                 visited.add((nx, ny))
                 queue.append((nx, ny, steps + 1))
     
     return -1
-
-def evaluate_fitness(maze, final_position, gene_length, path):
-    """Calculate fitness based on exact steps remaining to exit, with backtracking penalty."""
-    x, y = final_position
-    
-    # Calculate backtracking penalty
-    unique_positions = len(set(path))
-    backtrack_penalty = (len(path) - unique_positions) / len(path)
-    
-    # Full path completion gives maximum score
-    if (x, y) == maze.end:
-        return 1000 - (gene_length * 0.1) - backtrack_penalty
-    
-    steps = steps_to_exit(maze, (x, y))
-    
-    if steps == -1:
-        return -1000 - backtrack_penalty
-    
-    max_possible_steps = 3 * MAZE_SIZE  # Approximate worst-case scenario
-    scaled_fitness = max_possible_steps - steps
-    
-    return scaled_fitness - (gene_length * 0.1) - backtrack_penalty
 
 def initialize_population(pop_size):
     """Create initial random population with variable gene lengths."""
@@ -126,14 +164,45 @@ def select_parents(population, fitness_scores):
     return parents[0], parents[1]
 
 def mutation(individual):
-    """Mutate the last 30 genes by replacing them with new random values."""
+    """Mutate the individual by adding, removing, or replacing genes."""
     mutated = deepcopy(individual)
-    # Only perform mutation if individual has at least 30 elements
-    if len(mutated) >= 30:
-        # Create new random array of size 30
-        new_segment = np.random.randint(0, 4, size=30)  # 0 to 3 inclusive
-        # Replace the last 30 elements
-        mutated[-30:] = new_segment
+    
+    # Choose mutation type: 0=replace, 1=add, 2=remove
+    mutation_type = random.randint(0, 2)
+    
+    if mutation_type == 0:  # Replace mutation (original behavior)
+        # Only perform mutation if individual has at least MUTATION_TIP_LENGTH elements
+        if len(mutated) >= MUTATION_TIP_LENGTH:
+            # Create new random array of size MUTATION_TIP_LENGTH
+            new_segment = np.random.randint(0, 4, size=MUTATION_TIP_LENGTH)  # 0 to 3 inclusive
+            # Replace the last MUTATION_TIP_LENGTH elements
+            mutated[-MUTATION_TIP_LENGTH:] = new_segment
+    
+    elif mutation_type == 1:  # Add mutation
+        # Add random number of new genes (1 to MUTATION_TIP_LENGTH)
+        num_to_add = random.randint(1, MUTATION_TIP_LENGTH)
+        new_genes = np.random.randint(0, 4, size=num_to_add)
+        # Add at random position
+        position = random.randint(0, len(mutated))
+        mutated = mutated[:position] + list(new_genes) + mutated[position:]
+    
+    elif mutation_type == 2:  # Remove mutation
+        # Remove random number of genes (1 to MUTATION_TIP_LENGTH)
+        if len(mutated) > MIN_GENE_LENGTH:  # Ensure we don't go below minimum length
+            num_to_remove = random.randint(1, min(MUTATION_TIP_LENGTH, len(mutated) - MIN_GENE_LENGTH))
+            # Remove from random position
+            position = random.randint(0, len(mutated) - num_to_remove)
+            mutated = mutated[:position] + mutated[position + num_to_remove:]
+    
+    # Ensure gene length stays within bounds
+    scaled_max = MAX_GENE_LENGTH + MAZE_SIZE * 5
+    if len(mutated) > scaled_max:
+        mutated = mutated[:scaled_max]
+    
+    scaled_min = MIN_GENE_LENGTH
+    if len(mutated) < scaled_min:
+        mutated += [random.randint(0, 3) for _ in range(scaled_min - len(mutated))]
+    
     return mutated
 
 def crossover(parent1, parent2):
@@ -160,8 +229,33 @@ def crossover(parent1, parent2):
         
     return child1, child2
 
+def evaluate_fitness_with_distance_map(maze, final_position, gene_length, path, distance_map):
+    """Calculate fitness using the optimized steps_to_exit function."""
+    x, y = final_position
+    
+    # Calculate backtracking penalty
+    unique_positions = len(set(path))
+    backtrack_penalty = (len(path) - unique_positions) / len(path)
+    
+    # Full path completion gives maximum score
+    if (x, y) == maze.end:
+        return 1000 - (gene_length * 0.1) - backtrack_penalty
+    
+    steps = steps_to_exit(maze, (x, y), distance_map)
+    
+    if steps == -1:
+        return -1000 - backtrack_penalty
+    
+    max_possible_steps = 3 * MAZE_SIZE
+    scaled_fitness = max_possible_steps - steps
+    
+    return scaled_fitness - (gene_length * 0.1) - backtrack_penalty
+
 def genetic_algorithm(maze):
     """Run genetic algorithm to solve maze with visualization of other candidates."""
+    # Precompute the optimal distance map
+    distance_map = create_optimal_distance_map(maze)
+    
     population = initialize_population(POPULATION_SIZE)
     best_fitness = -float('inf')
     best_individual = None
@@ -173,11 +267,12 @@ def genetic_algorithm(maze):
     for generation in range(GENERATIONS):
         fitness_scores = []
         paths = []
-        all_individuals = []  # Store all individuals for visualization
+        all_individuals = []
         
         for individual in population:
             path, final_pos = execute_gene(maze, individual)
-            score = evaluate_fitness(maze, final_pos, len(individual), path)
+            # Use the optimized steps_to_exit with distance_map
+            score = evaluate_fitness_with_distance_map(maze, final_pos, len(individual), path, distance_map)
             fitness_scores.append(score)
             paths.append(path)
             all_individuals.append(individual)
@@ -204,7 +299,7 @@ def genetic_algorithm(maze):
         
         if generation % 10 == 0:
             final_pos = best_path[-1] if best_path else (0, 0)
-            steps = steps_to_exit(maze, final_pos) if final_pos != maze.end else 0
+            steps = steps_to_exit(maze, final_pos, distance_map) if final_pos != maze.end else 0
             
             # Calculate backtracking for best solution
             unique_positions = len(set(best_path))
@@ -328,7 +423,10 @@ if __name__ == "__main__":
     maze = setup_maze(actual_size)
     print(f"Maze size: {maze.grid.shape}")
     
-    best_solution, best_path = genetic_algorithm(maze)
+    # Precompute distance map once
+    distance_map = create_optimal_distance_map(maze)
+    
+    best_solution, best_path = genetic_algorithm(maze)  # You'll need to update 
     
     print("\nBest solution:")
     print(f"Path length: {len(best_path)}")

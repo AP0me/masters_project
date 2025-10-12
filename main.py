@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 # Constants
-GENERATIONS = 1000
+GENERATIONS = 500
 CROSSOVER_RATE = 0.7
 NUM_SHADOWS = 5
 MAZE_SIZE = 65  # Change this value to adjust maze size
@@ -239,12 +239,12 @@ def evaluate_fitness_with_distance_map(maze, final_position, gene_length, path, 
     
     # Full path completion gives maximum score
     if (x, y) == maze.end:
-        return 1000 - (gene_length * 0.1) - backtrack_penalty
+        return 200 - (gene_length * 0.1) - backtrack_penalty
     
     steps = steps_to_exit(maze, (x, y), distance_map)
     
     if steps == -1:
-        return -1000 - backtrack_penalty
+        return -200 - backtrack_penalty
     
     max_possible_steps = 3 * MAZE_SIZE
     scaled_fitness = max_possible_steps - steps

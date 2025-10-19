@@ -1,3 +1,4 @@
+import os
 import random
 from collections import deque
 from copy import deepcopy
@@ -10,12 +11,13 @@ import numpy as np
 GENERATIONS = 500
 CROSSOVER_RATE = 0.7
 NUM_SHADOWS = 5
-MAZE_SIZE = 16  # Change this value to adjust maze size
+MAZE_SIZE = 128  # Change this value to adjust maze size
 POPULATION_SIZE = (MAZE_SIZE * MAZE_SIZE) // 16
 TOURNAMENT_SIZE = POPULATION_SIZE * 50//100
 MIN_GENE_LENGTH = MAZE_SIZE
 MAX_GENE_LENGTH = 3 * MAZE_SIZE
 MUTATION_TIP_LENGTH = 10
+IMAGE_SAVE_PATH = "/home/apome/Desktop/Anar_Computer/split_desktop/x/DSnAI/masters_project/pictures"  # Change this to your desired path
 
 # Directions: 0=Up, 1=Down, 2=Left, 3=Right
 DIRECTIONS = {
@@ -24,6 +26,9 @@ DIRECTIONS = {
     2: (0, -1),
     3: (0, 1) 
 }
+
+# Create the directory if it doesn't exist
+os.makedirs(IMAGE_SAVE_PATH, exist_ok=True)
 
 def setup_maze(grid_size=MAZE_SIZE):
     """Initialize maze with proper dimensions."""
@@ -252,7 +257,7 @@ def evaluate_fitness_with_distance_map(maze, final_position, gene_length, path, 
     return scaled_fitness - (gene_length * 0.1) - backtrack_penalty
 
 def genetic_algorithm(maze):
-    """Run genetic algorithm to solve maze with visualization of other candidates."""
+    """Run genetic algorithm to solve maze with visualization of other candidates and save images."""
     # Precompute the optimal distance map
     distance_map = create_optimal_distance_map(maze)
     
@@ -355,6 +360,12 @@ def genetic_algorithm(maze):
             plt.title(f"Gen {generation}: Maze Size {maze.grid.shape[0]}x{maze.grid.shape[1]}\n"
                      f"Showing {NUM_SHADOWS} candidate shadows")
             plt.legend()
+            
+            # Save the image
+            filename = os.path.join(IMAGE_SAVE_PATH, f"generation_{generation:04d}.png")
+            plt.savefig(filename, dpi=150, bbox_inches='tight')
+            print(f"Saved image: {filename}")
+            
             plt.draw()
             plt.pause(0.1)  # Small pause to update the plot
     
@@ -368,6 +379,12 @@ def genetic_algorithm(maze):
     plt.legend()
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
+    
+    # Save fitness progression plot
+    fitness_filename = os.path.join(IMAGE_SAVE_PATH, "fitness_progression.png")
+    plt.savefig(fitness_filename, dpi=150, bbox_inches='tight')
+    print(f"Saved fitness progression: {fitness_filename}")
+    
     plt.show()
     
     return best_individual, best_path, best_fitness_history, avg_fitness_history

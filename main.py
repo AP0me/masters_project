@@ -10,7 +10,7 @@ import numpy as np
 GENERATIONS = 500
 CROSSOVER_RATE = 0.7
 NUM_SHADOWS = 5
-MAZE_SIZE = 65  # Change this value to adjust maze size
+MAZE_SIZE = 16  # Change this value to adjust maze size
 POPULATION_SIZE = (MAZE_SIZE * MAZE_SIZE) // 16
 TOURNAMENT_SIZE = POPULATION_SIZE * 50//100
 MIN_GENE_LENGTH = MAZE_SIZE
@@ -443,6 +443,8 @@ if __name__ == "__main__":
     
     maze = setup_maze(actual_size)
     print(f"Maze size: {maze.grid.shape}")
+
+    visualize_maze(maze, [])
     
     # Precompute distance map once
     distance_map = create_optimal_distance_map(maze)
